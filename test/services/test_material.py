@@ -75,6 +75,38 @@ class TestMaterialTlsVerification(unittest.TestCase):
         )
         self.assertEqual(results[0].source_info["rendition"]["id"], "987")
 
+    def test_material_requests_do_not_inherit_environment_proxy(self):
+        """
+        未配置项目代理时，requests 不能自动接管系统 HTTP(S) 代理。
+
+        macOS 的系统代理可能存在 TLS 兼容问题；显式传入 None 才能让
+        requests 保持直连，同时仍允许调用方通过 config.proxy 主动配置代理。
+        """
+        config.app["pexels_api_keys"] = ["pexels-key"]
+        config.proxy.clear()
+
+        fake_response = SimpleNamespace(json=lambda: {"videos": []})
+        with patch(
+            "app.services.material.requests.get", return_value=fake_response
+        ) as get:
+            results = material.search_videos_pexels("cat", minimum_duration=1)
+
+        self.assertEqual(results, [])
+        self.assertEqual(
+            get.call_args.kwargs["proxies"], {"http": None, "https": None}
+        )
+
+        config.proxy["https"] = "http://proxy.example.com:8080"
+        with patch(
+            "app.services.material.requests.get", return_value=fake_response
+        ) as get:
+            material.search_videos_pexels("cat", minimum_duration=1)
+
+        self.assertEqual(
+            get.call_args.kwargs["proxies"],
+            {"http": None, "https": "http://proxy.example.com:8080"},
+        )
+
     def test_search_pixabay_allows_explicit_tls_disable_for_proxy(self):
         """
         少数企业代理会使用自签证书。该场景必须显式配置关闭 TLS 校验，

@@ -171,6 +171,20 @@ def _get_tls_verify() -> bool:
     return bool(tls_verify)
 
 
+def _get_request_proxies() -> dict[str, str | None]:
+    """
+    返回素材请求使用的代理配置，并阻止 requests 自动注入环境代理。
+
+    requests 在传入空代理字典时仍会读取 HTTP(S)_PROXY 和 macOS 系统代理。
+    这会让本地代理接管 Pexels 请求，即使项目没有配置代理。先为 HTTP 和
+    HTTPS 显式填入 None，再覆盖项目中实际配置的代理，才能同时支持直连和
+    用户主动配置的代理。
+    """
+    proxies: dict[str, str | None] = {"http": None, "https": None}
+    proxies.update(config.proxy)
+    return proxies
+
+
 def get_api_key(cfg_key: str):
     api_keys = config.app.get(cfg_key)
     if not api_keys:
@@ -330,7 +344,7 @@ def search_videos_pexels(
         r = requests.get(
             query_url,
             headers=headers,
-            proxies=config.proxy,
+            proxies=_get_request_proxies(),
             verify=_get_tls_verify(),
             timeout=(30, 60),
         )
@@ -415,7 +429,10 @@ def search_videos_pixabay(
 
     try:
         r = requests.get(
-            query_url, proxies=config.proxy, verify=_get_tls_verify(), timeout=(30, 60)
+            query_url,
+            proxies=_get_request_proxies(),
+            verify=_get_tls_verify(),
+            timeout=(30, 60),
         )
         status_code = int(getattr(r, "status_code", 200))
         headers = getattr(r, "headers", {}) or {}
@@ -561,7 +578,7 @@ def search_videos_coverr(
         r = requests.get(
             query_url,
             headers=headers,
-            proxies=config.proxy,
+            proxies=_get_request_proxies(),
             verify=_get_tls_verify(),
             timeout=(30, 60),
         )
@@ -763,7 +780,7 @@ def generate_videos_wavespeed(
             f"{WAVESPEED_API_BASE_URL}/{model_id}",
             json=payload,
             headers=headers,
-            proxies=config.proxy,
+            proxies=_get_request_proxies(),
             verify=_get_tls_verify(),
             timeout=(30, 60),
         )
@@ -886,7 +903,7 @@ def _wait_for_wavespeed_prediction(
             response = requests.get(
                 f"{WAVESPEED_API_BASE_URL}/predictions/{prediction_id}/result",
                 headers=headers,
-                proxies=config.proxy,
+                proxies=_get_request_proxies(),
                 verify=_get_tls_verify(),
                 timeout=(30, 60),
             )
@@ -1031,7 +1048,7 @@ def save_video(video_url: str, save_dir: str = "") -> str:
             requests.get(
                 video_url,
                 headers=headers,
-                proxies=config.proxy,
+                proxies=_get_request_proxies(),
                 verify=_get_tls_verify(),
                 timeout=(60, 240),
             ).content
@@ -1219,7 +1236,7 @@ def _openai_image_download_bytes(
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/115.0.0.0 Safari/537.36"
                 },
-                proxies=config.proxy,
+                proxies=_get_request_proxies(),
                 verify=_get_tls_verify(),
                 timeout=(30, 120),
             )
@@ -1309,7 +1326,7 @@ def _request_openai_image(endpoint: str, payload: dict) -> tuple[bytes | None, s
                 endpoint,
                 json=payload,
                 headers=headers,
-                proxies=config.proxy,
+                proxies=_get_request_proxies(),
                 verify=_get_tls_verify(),
                 timeout=OPENAI_IMAGE_REQUEST_TIMEOUT,
             )
